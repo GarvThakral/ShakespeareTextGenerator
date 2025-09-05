@@ -4,6 +4,7 @@ import logging
 from typing import Tuple , Any , Dict
 import re
 
+@step
 def preprocessing_data(ds:ds.DatasetDict,maxInDs:int)->Tuple[ds.Dataset,ds.Dataset,int,Dict[int , str],Dict[str,int],int]:
     newVocab = []
 

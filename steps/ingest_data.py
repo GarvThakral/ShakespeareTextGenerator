@@ -19,4 +19,3 @@ def ingest_data()->Tuple[Union[DatasetDict, Dataset, IterableDatasetDict, Iterab
         maxInDs = max(len(sentence_array),maxInDs)
     return ds , maxInDs
 
-ingest_data()
