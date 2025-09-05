@@ -2,10 +2,10 @@ from zenml import step
 import tensorflow as tf
 from tensorflow.keras.layers import LSTM , Input , Embedding , Dropout , Dense
 from tensorflow.keras import Model
-
-
+import datasets as ds
+from typing import Tuple , Dict , Any
 @step
-def train_model(processed_ds_train  , maxInDs, vocab_size):
+def train_model(processed_ds_train:ds.Dataset  , maxInDs:int, vocab_size:int)->Tuple[Dict[str,Any] , str]:
     tf_ds_train = processed_ds_train.to_tf_dataset(
         columns = ['features'],
         label_cols=['labels'],
