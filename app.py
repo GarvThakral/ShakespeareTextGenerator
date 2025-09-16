@@ -15,15 +15,15 @@ def load_model_and_vocab(model_path="./saved_model/model.keras"):
     ds = load_dataset("Trelis/tiny-shakespeare")
     newVocab = []
     def create_new_vocab(sentence, newVocab):
-        sentence_array = re.findall(r"\b\w+\b", sentence.lower())
+        sentence_array = re.findall(r"\b\w+(?:'\w+)?\b|[.!?,-]", sentence.lower())
         new_words = [x for x in sentence_array if x not in newVocab]
-        newVocab += list(set(new_words))
+        newVocab += new_words
 
     ds['train'].map(lambda x: create_new_vocab(x["Text"], newVocab))
     ds['test'].map(lambda x: create_new_vocab(x["Text"], newVocab))
 
     # insert PAD at 0, UNK at 1 to match your pipeline
-    newVocab.insert(0, "<UNK>")
+    newVocab.insert(1, "<UNK>")
     newVocab.insert(0, "<PAD>")
 
     index_to_word = {i: k for i, k in enumerate(newVocab)}
@@ -82,69 +82,33 @@ def stable_sample_from_logits(logits, temperature=1.0, top_k=None):
         return np.random.choice(len(probs), p=probs)
 
 def generate_from_seed(seed_text, num_words=30, temperature=1.0, top_k=10):
-    # prepare initial sequence (pad to model input length)
+    print(f"Generating with seed: '{seed_text}'")  # Debug
+    
     seq = tokenize_and_pad(seed_text, word_to_index, maxInDs)
-    # init states with zeros (batch_size=1)
-    h0 = np.zeros((1, units_1), dtype=np.float32)
-    c0 = np.zeros((1, units_1), dtype=np.float32)
-    h1 = np.zeros((1, units_2), dtype=np.float32)
-    c1 = np.zeros((1, units_2), dtype=np.float32)
-
-    # feed the whole sequence once to get the states after the seed
-    inputs = tf.constant([seq], dtype=tf.int32)  # shape (1, maxInDs)
-    X = embedding_layer(inputs)  # (1, maxInDs, emb_dim)
-
-    # try to get states from LSTM layers (works if the layer was created with return_state=True)
-    try:
-        out1, h0, c0 = lstm_layer_1(X)  # process full seed
-        out2, h1, c1 = lstm_layer_2(out1)
-        last_token = seq[len([i for i in seq if i != 0]) - 1] if any(seq) else 0
-    except Exception:
-        # fallback: layer doesn't return states; use output only and take final timestep output
-        out1 = lstm_layer_1(X)
-        out2 = lstm_layer_2(out1)
-        # can't update hidden states; derive logits from last timestep and continue via argmax sampling fallback
-        logits = dense_layer_1(out2).numpy()
-        last_token = int(np.argmax(logits[0, -1, :]))
-
+    print(f"Tokenized sequence: {seq[:10]}...")  # Debug
+    
     generated = []
-    # if seed contains actual tokens, include their words in the returned text optionally
-    seed_words = []
-    # decode seed into words (skip PAD)
-    nonpad_idxs = [i for i in seq if i != 0]
-    for idx in nonpad_idxs:
-        seed_words.append(index_to_word.get(idx, "<UNK>"))
-
-    # generate step-by-step using states and last_token
-    for _ in range(num_words):
-        # embed last token
-        inp = tf.constant([[int(last_token)]], dtype=tf.int32)
-        emb = embedding_layer(inp)  # (1,1,emb_dim)
-
-        # call lstm layers with states; handle both possible returns
-        try:
-            out1_step, h0, c0 = lstm_layer_1(emb, initial_state=[h0, c0])
-        except Exception:
-            out1_step = lstm_layer_1(emb, initial_state=[h0, c0])
-
-        try:
-            out2_step, h1, c1 = lstm_layer_2(out1_step, initial_state=[h1, c1])
-        except Exception:
-            out2_step = lstm_layer_2(out1_step, initial_state=[h1, c1])
-
-        logits = dense_layer_1(out2_step).numpy()  # (1,1,vocab)
-        logits = logits[0, -1, :]  # (vocab,)
-
-        # sample next token
+    current_seq = seq.copy()
+    
+    for i in range(num_words):
+        inputs = tf.constant([current_seq], dtype=tf.int32)
+        predictions = model(inputs, training=False)
+        
+        logits = predictions[0, -1, :].numpy()
         next_tok = stable_sample_from_logits(logits, temperature=temperature, top_k=top_k)
         generated.append(int(next_tok))
-        last_token = int(next_tok)
-
-    # decode generated tokens to words
+        
+        current_seq = current_seq[1:] + [next_tok]
+        
+        if i % 10 == 0:
+            print(f"Generated {i} words so far...")  # Debug
+    
+    seed_words = [index_to_word.get(i, "<UNK>") for i in seq if i != 0]
     gen_words = [index_to_word.get(i, "<UNK>") for i in generated]
-    # join seed and generated for final output
-    full_words = seed_words + gen_words
-    return " ".join(full_words)
+    
+    result = " ".join(seed_words + gen_words)
+    print(f"Final result: {result[:100]}...")  # Debug
+    return result
 
 # ---- Streamlit UI ----
 st.title("Shakespeare-style text generator")

@@ -11,10 +11,7 @@ def preprocessing_data(ds:ds.DatasetDict,maxInDs:int)->Tuple[ds.Dataset,ds.Datas
     def create_new_vocab(sentence,newVocab):
         sentence_array = re.findall(r"\b\w+(?:'\w+)?\b|[.!?,-]", sentence.lower())
         new_words = [x for x in sentence_array if x not in newVocab]
-        new_words_set = set(new_words)
-        new_words = list(new_words_set)
-        newVocab += new_words
-
+        newVocab += new_words  # Just this line, no set()
     ds['train'].map(lambda x : create_new_vocab(x["Text"],newVocab))
     ds['test'].map(lambda x : create_new_vocab(x["Text"],newVocab))
 
@@ -28,7 +25,7 @@ def preprocessing_data(ds:ds.DatasetDict,maxInDs:int)->Tuple[ds.Dataset,ds.Datas
     def preprocessing_layer(sentence):
         sentence_array = re.findall(r"\b\w+(?:'\w+)?\b|[.!?,-]", sentence.lower())
         # print(sentence_array)
-        wor_to_in = [word_to_index[x] for x in sentence_array]
+        wor_to_in = [word_to_index.get(x, word_to_index['<UNK>']) for x in sentence_array]
         # print(wor_to_in)
         pad_len = maxInDs - len(wor_to_in)
         zero_array = [0]*pad_len
